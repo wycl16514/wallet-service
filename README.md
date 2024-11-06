@@ -1,2 +1,2 @@
-# wallet service
- interview project
+# wallet_service
+ interview service for wallet service
