@@ -16,6 +16,12 @@ In the following code, we use "FOR UPDATE" to lock resources at db level, and
 avoid critical resources deadlock
 */
 
+func (s *WalletService) CreateWallet() (int64, error) {
+	var id int64
+	err := s.DB.QueryRow("INSERT INTO wallets (balance) VALUES ($1) RETURNING id", 0).Scan(&id)
+	return id, err
+}
+
 func (s *WalletService) Deposit(userID int, amountStr string) error {
 	/*
 		handle deposit request, parse the number string into decimal value,

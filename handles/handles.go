@@ -16,6 +16,15 @@ func NewWalletHandler(service *services.WalletService) *WalletHandler {
 	return &WalletHandler{Service: service}
 }
 
+func (h *WalletHandler) CreateWallet(c *gin.Context) {
+    id, err := h.Service.CreateWallet()
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+        return
+    }
+    c.JSON(http.StatusOK, gin.H{"wallet_id": id})
+}
+
 func (h *WalletHandler) Deposit(c *gin.Context) {
 	userID, err := strconv.Atoi(c.Param("user_id"))
 	if err != nil {
