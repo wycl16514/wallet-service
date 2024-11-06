@@ -3,7 +3,6 @@ package services
 import (
 	"database/sql"
 	"errors"
-	"models"
 
 	"github.com/shopspring/decimal"
 )
@@ -12,11 +11,16 @@ type WalletService struct {
 	DB *sql.DB
 }
 
+/*
+In the following code, we use "FOR UPDATE" to lock resources at db level, and
+avoid critical resources deadlock
+*/
+
 func (s *WalletService) Deposit(userID int, amountStr string) error {
 	/*
 		handle deposit request, parse the number string into decimal value,
 	*/
-	amount, err := models.ParseAmount(amountStr)
+	amount, err := ParseAmount(amountStr)
 	if err != nil {
 		return err
 	}
@@ -51,7 +55,7 @@ func (s *WalletService) Deposit(userID int, amountStr string) error {
 }
 
 func (s *WalletService) Withdraw(userID int, amountStr string) error {
-	amount, err := models.ParseAmount(amountStr)
+	amount, err := ParseAmount(amountStr)
 	if err != nil {
 		return err
 	}
@@ -91,7 +95,7 @@ func (s *WalletService) Withdraw(userID int, amountStr string) error {
 }
 
 func (s *WalletService) Transfer(fromUserID, toUserID int, amountStr string) error {
-	amount, err := models.ParseAmount(amountStr)
+	amount, err := ParseAmount(amountStr)
 	if err != nil {
 		return err
 	}
@@ -143,4 +147,40 @@ func (s *WalletService) Transfer(fromUserID, toUserID int, amountStr string) err
 	}
 
 	return tx.Commit()
+}
+
+func (s *WalletService) GetBalance(userID int) (decimal.Decimal, error) {
+	var balance decimal.Decimal
+	err := s.DB.QueryRow("SELECT balance FROM wallets WHERE user_id = $1", userID).Scan(&balance)
+	if err != nil {
+		return decimal.Zero, err
+	}
+	return balance, nil
+}
+
+// GetTransactionHistory returns the transaction history for a given user
+func (s *WalletService) GetTransactionHistory(userID int) ([]Transaction, error) {
+	rows, err := s.DB.Query("SELECT id, user_id, type, amount, to_user_id, created_at FROM transactions WHERE user_id = $1 ORDER BY created_at DESC", userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var transactions []Transaction
+	for rows.Next() {
+		var transaction Transaction
+		var amount decimal.Decimal
+		err := rows.Scan(&transaction.ID, &transaction.UserID, &transaction.Type, &amount, &transaction.ToUserID, &transaction.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		transaction.Amount = amount
+		transactions = append(transactions, transaction)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return transactions, nil
 }
