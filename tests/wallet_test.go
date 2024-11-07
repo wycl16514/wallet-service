@@ -3,14 +3,13 @@ package tests
 import (
 	"bytes"
 	"config"
-	"encoding/json"
 	"fmt"
 	"handles"
 	"net/http"
 	"net/http/httptest"
 	"services"
 	"testing"
-
+    "encoding/json"
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
@@ -236,6 +235,73 @@ func TestTransfer(t *testing.T) {
 	assert.Equal(t, true, isEqual)
 }
 
+func TestGetTransactionHistory(t *testing.T) {
+	setup()
+	userID := 2
+	//delete all transactions for user with id 2
+	_, err := walletService.DB.Exec("DELETE FROM transactions WHERE user_id = $1", userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	//update user balance to 100.00
+	_, err = walletService.DB.Exec("UPDATE wallets set balance = $2 where user_id = $1", userID, decimal.NewFromFloat(100.00))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	//make a transfer from user with id 2 to user with id 1
+	transferAmount := decimal.NewFromFloat(50.00)
+	toUserID := 1
+	body := map[string]interface{}{
+		"to_user_id": toUserID,
+		"amount":     transferAmount.String(),
+	}
+	bodyJSON, _ := json.Marshal(body)
+	fromUserID := 2
+	fromUserIDStr := fmt.Sprintf("%d", fromUserID)
+	req, err := http.NewRequest(http.MethodPost, "/wallet/"+fromUserIDStr+"/transfer", bytes.NewReader(bodyJSON))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a response recorder to capture the result
+	rr := httptest.NewRecorder()
+	// Create a new Gin engine
+	router := gin.Default()
+	router.POST("/wallet/:from_user_id/transfer", walletHandler.Transfer)
+	//  Perform the request
+	router.ServeHTTP(rr, req)
+
+
+	userStr := fmt.Sprintf("%d", userID)
+
+	req, err = http.NewRequest(http.MethodGet, "/wallet/"+userStr+"/transactions", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rr = httptest.NewRecorder()
+	router = gin.Default()
+	router.GET("/wallet/:user_id/transactions", walletHandler.GetTransactionHistory)
+	router.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	var transactions []services.Transaction
+	err = json.Unmarshal([]byte(rr.Body.String()), &transactions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	txCount := len(transactions)
+	assert.Equal(t, 1, txCount)
+	assert.Equal(t, "transfer", transactions[0].Type)
+    isEqual := transferAmount.Equal(transactions[0].Amount)
+	assert.Equal(t, true, isEqual)
+	assert.Equal(t, toUserID, transactions[0].ToUserID)
+	assert.Equal(t, userID, transactions[0].UserID)
+}
+
 func TestDepositInvalidAmount(t *testing.T) {
 	setup()
 	//make sure user with id 1 exists
@@ -332,5 +398,5 @@ func TestTransferInsufficientBalance(t *testing.T) {
 	router.ServeHTTP(rr, req)
 
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
-	assert.Contains(t, rr.Body.String(), "Insufficient balance")
+	assert.Contains(t, rr.Body.String(), "insufficient balance")
 }

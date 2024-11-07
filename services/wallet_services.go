@@ -122,7 +122,7 @@ func (s *WalletService) Transfer(fromUserID, toUserID int, amountStr string) err
 	//check given user has enough money to transfer
 	//should we check the amount is positive number?
 	if fromBalance.LessThan(amount) {
-		return errors.New("Insufficient balance")
+		return errors.New("insufficient balance")
 	}
 
 	//get the balance of the receiver
