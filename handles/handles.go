@@ -4,8 +4,9 @@ import (
 	"net/http"
 	"services"
 	"strconv"
-    "github.com/shopspring/decimal"
+
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 )
 
 type WalletHandler struct {
@@ -17,12 +18,12 @@ func NewWalletHandler(service *services.WalletService) *WalletHandler {
 }
 
 func (h *WalletHandler) CreateWallet(c *gin.Context) {
-    id, err := h.Service.CreateWallet()
-    if err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-        return
-    }
-    c.JSON(http.StatusOK, gin.H{"wallet_id": id})
+	id, err := h.Service.CreateWallet()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"wallet_id": id})
 }
 
 func (h *WalletHandler) Deposit(c *gin.Context) {
@@ -77,7 +78,7 @@ func (h *WalletHandler) Withdraw(c *gin.Context) {
 
 	// Call the service layer to perform the withdrawal
 	if err := h.Service.Withdraw(userID, request.Amount); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -102,7 +103,7 @@ func (h *WalletHandler) Transfer(c *gin.Context) {
 
 	// Call the service layer to perform the transfer
 	if err := h.Service.Transfer(fromUserID, request.ToUserID, request.Amount); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 

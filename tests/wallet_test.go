@@ -283,3 +283,54 @@ func TestDepositNegativeAmount(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
 	assert.Contains(t, rr.Body.String(), "Deposit amount must be greater than 0")
 }
+
+func TestWithdrawInsufficientBalance(t *testing.T) {
+	setup()
+	userID := 1
+	withdrawAmount := decimal.NewFromFloat(10000.00) // Exceeds balance
+	userStr := fmt.Sprintf("%d", userID)
+
+	body := map[string]interface{}{"amount": withdrawAmount}
+	bodyJSON, _ := json.Marshal(body)
+
+	req, err := http.NewRequest(http.MethodPost, "/wallet/"+userStr+"/withdraw", bytes.NewBuffer(bodyJSON))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	router := gin.Default()
+	router.POST("/wallet/:user_id/withdraw", walletHandler.Withdraw)
+	router.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "Insufficient balance")
+}
+
+func TestTransferInsufficientBalance(t *testing.T) {
+	setup()
+	fromUserID := 1
+	toUserID := 2
+	transferAmount := decimal.NewFromFloat(10000.00) // Exceeds balance
+
+	body := map[string]interface{}{
+		"to_user_id": toUserID,
+		"amount":     transferAmount,
+	}
+	bodyJSON, _ := json.Marshal(body)
+
+	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("/wallet/%d/transfer", fromUserID), bytes.NewBuffer(bodyJSON))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	router := gin.Default()
+	router.POST("/wallet/:from_user_id/transfer", walletHandler.Transfer)
+	router.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "Insufficient balance")
+}

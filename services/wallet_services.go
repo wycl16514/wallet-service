@@ -81,7 +81,7 @@ func (s *WalletService) Withdraw(userID int, amountStr string) error {
 
 	//make sure withdraw can't more than the amount of balance
 	if balance.LessThan(amount) {
-		return errors.New("insufficient balance")
+		return errors.New("Insufficient balance")
 	}
 
 	//reduce the amount from balance and set new balance
@@ -122,7 +122,7 @@ func (s *WalletService) Transfer(fromUserID, toUserID int, amountStr string) err
 	//check given user has enough money to transfer
 	//should we check the amount is positive number?
 	if fromBalance.LessThan(amount) {
-		return errors.New("insufficient balance")
+		return errors.New("Insufficient balance")
 	}
 
 	//get the balance of the receiver
