@@ -19,4 +19,7 @@
 # Test db connection:
    1. subfolder of config is package of name config, it is responsible for connecting to postgreSQL then returning a DB object.
 
+# Code explaination
+Please check my video explaination: https://youtu.be/abYRo1A4AaI
+
       
