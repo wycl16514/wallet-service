@@ -3,13 +3,15 @@ package tests
 import (
 	"bytes"
 	"config"
+	"encoding/json"
 	"fmt"
 	"handles"
 	"net/http"
 	"net/http/httptest"
 	"services"
+	"sync"
 	"testing"
-    "encoding/json"
+
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
@@ -273,7 +275,6 @@ func TestGetTransactionHistory(t *testing.T) {
 	//  Perform the request
 	router.ServeHTTP(rr, req)
 
-
 	userStr := fmt.Sprintf("%d", userID)
 
 	req, err = http.NewRequest(http.MethodGet, "/wallet/"+userStr+"/transactions", nil)
@@ -292,14 +293,41 @@ func TestGetTransactionHistory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	
+
 	txCount := len(transactions)
 	assert.Equal(t, 1, txCount)
 	assert.Equal(t, "transfer", transactions[0].Type)
-    isEqual := transferAmount.Equal(transactions[0].Amount)
+	isEqual := transferAmount.Equal(transactions[0].Amount)
 	assert.Equal(t, true, isEqual)
 	assert.Equal(t, toUserID, transactions[0].ToUserID)
 	assert.Equal(t, userID, transactions[0].UserID)
+}
+
+func TestTransferInvalidUserID(t *testing.T) {
+	setup()
+	fromUserID := -1 // Invalid user ID
+	toUserID := 2
+	transferAmount := decimal.NewFromFloat(50.00)
+
+	body := map[string]interface{}{
+		"to_user_id": toUserID,
+		"amount":     transferAmount,
+	}
+	bodyJSON, _ := json.Marshal(body)
+
+	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("/wallet/%d/transfer", fromUserID), bytes.NewBuffer(bodyJSON))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	router := gin.Default()
+	router.POST("/wallet/:from_user_id/transfer", walletHandler.Transfer)
+	router.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+
 }
 
 func TestDepositInvalidAmount(t *testing.T) {
@@ -399,4 +427,72 @@ func TestTransferInsufficientBalance(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
 	assert.Contains(t, rr.Body.String(), "insufficient balance")
+}
+
+func TestTransferRaceCondition(t *testing.T) {
+	setup()
+	fromUserID := 1
+	toUserID := 2
+	//set receiver balance to 0 for later verification
+	_, err := walletService.DB.Exec("UPDATE wallets set balance = $2 where user_id = $1", toUserID, decimal.Zero)
+	if err != nil {
+		t.Fatal(err)
+	}
+	//set sender balance to 1000.00 for later verification
+	_, err = walletService.DB.Exec("UPDATE wallets set balance = $2 where user_id = $1", fromUserID,
+		decimal.NewFromFloat(1000.00))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	transferAmount := decimal.NewFromFloat(50.00)
+	numTransfers := 10
+	var wg sync.WaitGroup
+
+	for i := 0; i < numTransfers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			body := map[string]interface{}{
+				"to_user_id": toUserID,
+				"amount":     transferAmount,
+			}
+			bodyJSON, _ := json.Marshal(body)
+
+			req, _ := http.NewRequest(http.MethodPost, fmt.Sprintf("/wallet/%d/transfer", fromUserID), bytes.NewBuffer(bodyJSON))
+			req.Header.Set("Content-Type", "application/json")
+
+			rr := httptest.NewRecorder()
+			router := gin.Default()
+			router.POST("/wallet/:from_user_id/transfer", walletHandler.Transfer)
+			router.ServeHTTP(rr, req)
+
+			assert.Equal(t, http.StatusOK, rr.Code)
+		}()
+	}
+
+	wg.Wait()
+
+	// Calculate expected final balances
+	initialBalance := decimal.NewFromFloat(1000.00)
+	expectedFromUserBalance := initialBalance.Sub(transferAmount.Mul(decimal.NewFromInt(int64(numTransfers))))
+	expectedToUserBalance := decimal.NewFromFloat(0.00).Add(transferAmount.Mul(decimal.NewFromInt(int64(numTransfers))))
+
+	// Check balances
+	router := gin.Default()
+	router.GET("/wallet/:user_id/balance", walletHandler.GetBalance)
+
+	req, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("/wallet/%d/balance", fromUserID), nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	//Check the response
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), expectedFromUserBalance.String())
+
+	req, _ = http.NewRequest(http.MethodGet, fmt.Sprintf("/wallet/%d/balance", toUserID), nil)
+	rr = httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), expectedToUserBalance.String())
 }
