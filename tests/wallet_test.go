@@ -174,3 +174,71 @@ func TestGetBalance(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rr.Code)
 	assert.Contains(t, rr.Body.String(), initialDeposit.String())
 }
+
+func TestTransfer(t *testing.T) {
+	setup()
+
+	// make sure user with id 1 and 2 exist
+	fromUserID := 1
+	toUserID := 2
+
+	//get initial deposit of sender for later verification
+	var initialDeposit decimal.Decimal
+	err := walletService.DB.QueryRow("SELECT balance FROM wallets WHERE user_id = $1", fromUserID).Scan(&initialDeposit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	//set receiver balance to 0 for later verification
+	_, err = walletService.DB.Exec("UPDATE wallets set balance = $2 where user_id = $1", toUserID, decimal.Zero)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Prepare the request to transfer money
+	transferAmount := decimal.NewFromFloat(50.00)
+	body := map[string]interface{}{
+		"to_user_id": toUserID,
+		"amount":     transferAmount.String(),
+	}
+	bodyJSON, _ := json.Marshal(body)
+	fromUserIDStr := fmt.Sprintf("%d", fromUserID)
+	req, err := http.NewRequest(http.MethodPost, "/wallet/"+fromUserIDStr+"/transfer", bytes.NewReader(bodyJSON))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a response recorder to capture the result
+	rr := httptest.NewRecorder()
+
+	// Create a new Gin engine
+	router := gin.Default()
+	router.POST("/wallet/:from_user_id/transfer", walletHandler.Transfer)
+
+	//  Perform the request
+	router.ServeHTTP(rr, req)
+
+	// Check the response
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), "Transfer successful")
+
+	// Check the updated balances
+	var fromUserBalance decimal.Decimal
+	var toUserBalance decimal.Decimal
+	err = walletService.DB.QueryRow("SELECT balance FROM wallets WHERE user_id = $1", fromUserID).Scan(&fromUserBalance)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = walletService.DB.QueryRow("SELECT balance FROM wallets WHERE user_id = $1", toUserID).Scan(&toUserBalance)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The sender's balance should be decreased by transferAmount
+	expectedFromUserBalance := initialDeposit.Sub(transferAmount)
+	isEqual := fromUserBalance.Equal(expectedFromUserBalance)
+	assert.Equal(t, true, isEqual)
+
+	// The receiver's balance should be increased by transferAmount
+	isEqual = transferAmount.Equal(toUserBalance)
+	assert.Equal(t, true, isEqual)
+}
