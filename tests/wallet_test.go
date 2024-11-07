@@ -140,3 +140,37 @@ func TestWithdraw(t *testing.T) {
 	isEqual := expectedBalance.Equal(balance)
 	assert.Equal(t, true, isEqual)
 }
+
+func TestGetBalance(t *testing.T) {
+	setup()
+
+	// make sure user with id 1 exists
+	userID := 1
+	//init user with given balance
+	initialDeposit := decimal.NewFromFloat(300.00)
+	_, err := walletService.DB.Exec("UPDATE wallets set balance = $2 where user_id = $1", userID, initialDeposit)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	//  Prepare the request to get the balance
+	userStr := fmt.Sprintf("%d", userID)
+	req, err := http.NewRequest(http.MethodGet, "/wallet/"+userStr+"/balance", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a response recorder to capture the result
+	rr := httptest.NewRecorder()
+
+	// Create a new Gin engine
+	router := gin.Default()
+	router.GET("/wallet/:user_id/balance", walletHandler.GetBalance)
+
+	//Perform the request
+	router.ServeHTTP(rr, req)
+
+	//Check the response
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), initialDeposit.String())
+}
