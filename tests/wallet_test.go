@@ -26,12 +26,6 @@ func setup() {
 		panic(err)
 	}
 
-	// tables, err := config.ListTables(db)
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// fmt.Println(tables)
-
 	walletService = &services.WalletService{DB: db}
 	walletHandler = &handles.WalletHandler{Service: walletService}
 }
@@ -143,7 +137,6 @@ func TestWithdraw(t *testing.T) {
 
 func TestGetBalance(t *testing.T) {
 	setup()
-
 	// make sure user with id 1 exists
 	userID := 1
 	//init user with given balance
@@ -241,4 +234,52 @@ func TestTransfer(t *testing.T) {
 	// The receiver's balance should be increased by transferAmount
 	isEqual = transferAmount.Equal(toUserBalance)
 	assert.Equal(t, true, isEqual)
+}
+
+func TestDepositInvalidAmount(t *testing.T) {
+	setup()
+	//make sure user with id 1 exists
+	userID := 1
+	userStr := fmt.Sprintf("%d", userID)
+
+	body := map[string]interface{}{"amount": "invalid"}
+	bodyJSON, _ := json.Marshal(body)
+
+	req, err := http.NewRequest(http.MethodPost, "/wallet/"+userStr+"/deposit", bytes.NewBuffer(bodyJSON))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	router := gin.Default()
+	router.POST("/wallet/:user_id/deposit", walletHandler.Deposit)
+	router.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "Invalid amount format")
+}
+
+func TestDepositNegativeAmount(t *testing.T) {
+	setup()
+	//make sure user with id 1 exists
+	userID := 1
+	userStr := fmt.Sprintf("%d", userID)
+
+	body := map[string]interface{}{"amount": "-100.00"}
+	bodyJSON, _ := json.Marshal(body)
+
+	req, err := http.NewRequest(http.MethodPost, "/wallet/"+userStr+"/deposit", bytes.NewBuffer(bodyJSON))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	router := gin.Default()
+	router.POST("/wallet/:user_id/deposit", walletHandler.Deposit)
+	router.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "Deposit amount must be greater than 0")
 }

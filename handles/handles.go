@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"services"
 	"strconv"
-
+    "github.com/shopspring/decimal"
 	"github.com/gin-gonic/gin"
 )
 
@@ -40,6 +40,17 @@ func (h *WalletHandler) Deposit(c *gin.Context) {
 		return
 	}
 
+	//check if amount is number format
+	amount, err := decimal.NewFromString(request.Amount)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid amount format"})
+		return
+	}
+
+	if amount.Sign() <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Deposit amount must be greater than 0"})
+		return
+	}
 	// Call the service layer to perform the deposit
 	if err := h.Service.Deposit(userID, request.Amount); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
