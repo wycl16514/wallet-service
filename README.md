@@ -16,10 +16,16 @@
     insert into wallets(user_id, balance) values(2, 0);
  11.  
 
-# Test db connection:
-   1. subfolder of config is package of name config, it is responsible for connecting to postgreSQL then returning a DB object.
+ 
 
 # Code explaination
 Please check my video explaination: https://youtu.be/abYRo1A4AaI
+
+1. subfolder of config is package of name config, it is responsible for connecting to postgreSQL then returning a DB object.
+2. subfolder services act as a model, it is responsible for iteracting with DB, such as using SQL to query or update records
+3. subfolder handles act as a controller, it is responsible for handling restful API requests, it will verify the format of request, extract parameters and doing business logic, then
+   it will transfer the job of handling data to services
+4. subfolder tests contains unit tests for the project, it contains normal test cases and error test cases and one test case for race condition
+5. the best way for review the code is by viewing the video I upload to youtube which gives detail explaination and test case debugging to showcase the code flow.
 
       
